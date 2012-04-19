@@ -1,0 +1,8 @@
+.DS_Store
+.classpath
+.project
+.settings/
+*.launch
+WebContent/VAADIN/
+WebContent/WEB-INF/
+build/
