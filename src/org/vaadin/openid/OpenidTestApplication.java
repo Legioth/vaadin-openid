@@ -10,10 +10,10 @@ import com.vaadin.Application;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.Link;
+import com.vaadin.ui.Root;
 import com.vaadin.ui.VerticalLayout;
-import com.vaadin.ui.Window;
 
-public class OpenidTestApplication extends Application {
+public class OpenidTestApplication extends Application.LegacyApplication {
 
     @Override
     public void init() {
@@ -21,7 +21,8 @@ public class OpenidTestApplication extends Application {
         container.setSpacing(true);
         container.setMargin(true);
 
-        Window mainWindow = new Window("OpenId test", container);
+        Root.LegacyWindow mainWindow = new Root.LegacyWindow("OpenId test",
+                container);
         setMainWindow(mainWindow);
 
         final OpenIdHandler openIdHandler = new OpenIdHandler(this);
@@ -40,7 +41,7 @@ public class OpenidTestApplication extends Application {
 
         openIdHandler.addListener(new OpenIdHandler.OpenIdLoginListener() {
             public void onLogin(String id, Map<UserAttribute, String> userInfo) {
-                Window window = getMainWindow();
+                Root.LegacyWindow window = getMainWindow();
                 window.removeComponent(linkHolder);
                 window.addComponent(new Label("Logged in identity: " + id));
                 Set<UserAttribute> missingFields = EnumSet
@@ -71,6 +72,6 @@ public class OpenidTestApplication extends Application {
     private static Link createLoginLink(OpenIdHandler openIdHandler, String id,
             String caption) {
         return new Link(caption, openIdHandler.getLoginResource(id),
-                "openidLogin", 600, 400, Window.BORDER_NONE);
+                "openidLogin", 600, 400, 0);
     }
 }

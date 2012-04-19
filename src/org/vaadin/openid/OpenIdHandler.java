@@ -1,10 +1,10 @@
 package org.vaadin.openid;
 
-import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -30,21 +30,19 @@ import com.dyuproject.openid.ext.AxSchemaExtension;
 import com.dyuproject.util.http.SimpleHttpConnector;
 import com.dyuproject.util.http.UrlEncodedParameterMap;
 import com.vaadin.Application;
-import com.vaadin.terminal.DownloadStream;
 import com.vaadin.terminal.ExternalResource;
-import com.vaadin.terminal.ParameterHandler;
+import com.vaadin.terminal.RequestHandler;
 import com.vaadin.terminal.Resource;
-import com.vaadin.terminal.URIHandler;
+import com.vaadin.terminal.WrappedRequest;
+import com.vaadin.terminal.WrappedResponse;
 import com.vaadin.ui.Embedded;
-import com.vaadin.ui.Window;
 
 public class OpenIdHandler {
     /**
      * The different pieces of information that the OpenID provider can return
      */
     public enum UserAttribute {
-        email, firstname, lastname, country, language, fullname, nickname, dob,
-        gender, postcode, timezone;
+        email, firstname, lastname, country, language, fullname, nickname, dob, gender, postcode, timezone;
     }
 
     /**
@@ -94,39 +92,35 @@ public class OpenIdHandler {
     private final Collection<OpenIdLoginListener> listeners = new ArrayList<OpenIdHandler.OpenIdLoginListener>();
     private AxSchemaExtension attributeExchange = null;
 
-    private final ParameterHandler parameterHandler = new ParameterHandler() {
-        public void handleParameters(final Map<String, String[]> parameters) {
+    private final RequestHandler requestHandler = new RequestHandler() {
+        public boolean handleRequest(Application application,
+                WrappedRequest request, WrappedResponse response)
+                throws IOException {
+            Map<String, String[]> parameters = request.getParameterMap();
             // If we seem to have an openid response, add an uri handler to
             // check the info and give a reasonable response
             String mode = getOpenidMode(parameters);
-            if (mode != null) {
-                getApplication().getMainWindow().addURIHandler(
-                        createUriHandler(parameters, mode));
+            if (mode == null) {
+                return false;
             }
-        }
 
-        private URIHandler createUriHandler(
-                final Map<String, String[]> parameters, final String mode) {
-            return new URIHandler() {
-                public DownloadStream handleURI(URL context, String relativeUri) {
-                    // Don't use this uri handler any more
-                    getApplication().getMainWindow().removeURIHandler(this);
+            String requestPathInfo = request.getRequestPathInfo();
+            OpenIdUser openIdUser = openIdUsers.get(requestPathInfo);
+            if (openIdUser == null) {
+                // Don't return anything if this isn't a url that we
+                // have registered
+                return false;
+            }
 
-                    OpenIdUser openIdUser = openIdUsers.get(relativeUri);
-                    if (openIdUser == null) {
-                        // Don't return anything if this isn't a url that we
-                        // have registered
-                        return null;
-                    }
+            handleLoginRequest(openIdUser, mode, parameters);
 
-                    handleLoginRequest(openIdUser, mode, parameters);
-
-                    // Return some html that causes the dialog to close and
-                    // Vaadin in the original window to refresh
-                    return new DownloadStream(new ByteArrayInputStream(
-                            returnResponse), "text/html", "openidReturn");
-                }
-            };
+            // Return some html that causes the dialog to close and
+            // Vaadin in the original window to refresh
+            response.setContentType("text/html");
+            OutputStream outputStream = response.getOutputStream();
+            outputStream.write(returnResponse);
+            outputStream.flush();
+            return true;
         }
     };
 
@@ -144,12 +138,7 @@ public class OpenIdHandler {
      */
     public OpenIdHandler(Application application) {
         this.application = application;
-
-        Window window = application.getMainWindow();
-        if (window == null) {
-            throw new NullPointerException("application has not main window");
-        }
-        window.addParameterHandler(parameterHandler);
+        application.addRequestHandler(requestHandler);
 
         isAttached = true;
     }
@@ -162,8 +151,7 @@ public class OpenIdHandler {
         isAttached = false;
         listeners.clear();
         openIdUsers.clear();
-        getApplication().getMainWindow().removeParameterHandler(
-                parameterHandler);
+        getApplication().removeRequestHandler(requestHandler);
     }
 
     protected Application getApplication() {
@@ -254,10 +242,10 @@ public class OpenIdHandler {
                 throw new RuntimeException("Association failed for " + id);
             }
 
-            String localUrl = application.getMainWindow().getName() + "/"
-                    + LOGIN_HANDLER_URL + "/" + counter.getAndIncrement();
+            String localUrl = LOGIN_HANDLER_URL + "/"
+                    + counter.getAndIncrement();
 
-            openIdUsers.put(localUrl, openIdUser);
+            openIdUsers.put("/" + localUrl, openIdUser);
 
             String applicationUrl = application.getURL().toString();
 
